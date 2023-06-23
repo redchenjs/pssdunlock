@@ -11,14 +11,16 @@
 
 #include <libusb-1.0/libusb.h>
 
-#define VID_T3 0x04e8
-#define PID_T3 0x61f4
-
-#define VID_T5 0x04e8
-#define PID_T5 0x61f6
-
 #define EP_DATA_IN  0x02
 #define EP_DATA_OUT 0x81
+
+#define VID_SAMSUNG   0x04e8
+
+#define PID_T3_NORMAL 0x61f3
+#define PID_T3_LOCKED 0x61f4
+
+#define PID_T5_NORMAL 0x61f5
+#define PID_T5_LOCKED 0x61f6
 
 uint8_t payload_header[31] = {
     0x55, 0x53, 0x42, 0x43, 0x0a, 0x00, 0x00, 0x00,
@@ -38,9 +40,9 @@ uint8_t payload_passwd[512] = {0};
 
 int main(int argc, char **argv)
 {
-    uint16_t vid = 0;
-    uint16_t pid = 0;
     int transferred = 0;
+    uint16_t pid_normal = 0;
+    uint16_t pid_locked = 0;
     struct libusb_device_handle *devh = NULL;
 
     // Check arguments
@@ -51,11 +53,11 @@ int main(int argc, char **argv)
 
     // Select device
     if (!strcmp(argv[1], "t3")) {
-        vid = VID_T3;
-        pid = PID_T3;
+        pid_normal = PID_T3_NORMAL;
+        pid_locked = PID_T3_LOCKED;
     } else if (!strcmp(argv[1], "t5")) {
-        vid = VID_T5;
-        pid = PID_T5;
+        pid_normal = PID_T5_NORMAL;
+        pid_locked = PID_T5_LOCKED;
     } else {
         fprintf(stderr, "Unknown device: %s\n", argv[1]);
         exit(1);
@@ -72,9 +74,14 @@ int main(int argc, char **argv)
     }
 
     // Find device
-    devh = libusb_open_device_with_vid_pid(NULL, vid, pid);
+    devh = libusb_open_device_with_vid_pid(NULL, VID_SAMSUNG, pid_locked);
     if (!devh) {
-        fprintf(stderr, "No locked %s device found\n", argv[1]);
+        devh = libusb_open_device_with_vid_pid(NULL, VID_SAMSUNG, pid_normal);
+        if (!devh) {
+            fprintf(stderr, "No %s device found\n", argv[1]);
+        } else {
+            fprintf(stderr, "Device is unlocked\n", argv[1]);
+        }
         goto out;
     }
 
