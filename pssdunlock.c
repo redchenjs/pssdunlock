@@ -1,5 +1,5 @@
 /*
- * pssdunlock.cpp
+ * pssdunlock.c
  *
  *  Created on: 2023-06-23 09:15
  *      Author: Jack Chen <redchenjs@live.com>
@@ -16,24 +16,31 @@
 
 #define VID_SAMSUNG   0x04e8
 
+#define PID_T1_NORMAL 0x61f1
+#define PID_T1_LOCKED 0x61f2
+
 #define PID_T3_NORMAL 0x61f3
 #define PID_T3_LOCKED 0x61f4
 
 #define PID_T5_NORMAL 0x61f5
 #define PID_T5_LOCKED 0x61f6
 
-uint8_t payload_header[31] = {
-    0x55, 0x53, 0x42, 0x43, 0x0a, 0x00, 0x00, 0x00,
-    0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x10, 0x85,
-    0x0a, 0x26, 0x00, 0xd6, 0x00, 0x01, 0x00, 0xc6,
-    0x00, 0x4f, 0x00, 0xc2, 0x00, 0xb0, 0x00
+uint8_t payload_unlock[31] = {
+    0x55, 0x53, 0x42, 0x43,
+    0x0a, 0x00, 0x00, 0x00,
+    0x00, 0x02, 0x00, 0x00,
+    0x00, 0x00, 0x10,
+    0x85, 0x0a, 0x26, 0x00, 0xd6, 0x00, 0x01, 0x00,
+    0xc6, 0x00, 0x4f, 0x00, 0xc2, 0x00, 0xb0, 0x00
 };
 
 uint8_t payload_relink[31] = {
-    0x55, 0x53, 0x42, 0x43, 0x0b, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0xe8,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    0x55, 0x53, 0x42, 0x43,
+    0x0b, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x06,
+    0xe8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
 uint8_t payload_passwd[512] = {0};
@@ -46,13 +53,20 @@ int main(int argc, char **argv)
     struct libusb_device_handle *devh = NULL;
 
     // Check arguments
-    if (argc != 3) {
-        fprintf(stderr, "Usage: %s <device> <password>\n", argv[0]);
+    if (argc != 2 && argc != 3) {
+        printf("Usage: %s <device> [password]\n", argv[0]);
+        printf("\n");
+        printf("Options:\n");
+        printf("  <device>      Select device model: t1, t3, t5\n");
+        printf("  [password]    Unlock password (Optional)\n");
         exit(1);
     }
 
     // Select device
-    if (!strcmp(argv[1], "t3")) {
+    if (!strcmp(argv[1], "t1")) {
+        pid_normal = PID_T1_NORMAL;
+        pid_locked = PID_T1_LOCKED;
+    } else if (!strcmp(argv[1], "t3")) {
         pid_normal = PID_T3_NORMAL;
         pid_locked = PID_T3_LOCKED;
     } else if (!strcmp(argv[1], "t5")) {
@@ -62,9 +76,6 @@ int main(int argc, char **argv)
         fprintf(stderr, "Unknown device: %s\n", argv[1]);
         exit(1);
     }
-
-    // Copy password to payload
-    strncpy((char *)payload_passwd, argv[2], sizeof(payload_passwd) - 1);
 
     // Initialize libusb
     int rc = libusb_init(NULL);
@@ -83,6 +94,15 @@ int main(int argc, char **argv)
             fprintf(stderr, "Device is unlocked\n", argv[1]);
         }
         goto out;
+    }
+
+    // Get password
+    if (argc == 2) {
+        printf("Password: ");
+        fgets(payload_passwd, sizeof(payload_passwd) - 1, stdin);
+        payload_passwd[strlen(payload_passwd) - 1] = '\0';
+    } else {
+        strncpy((char *)payload_passwd, argv[2], sizeof(payload_passwd) - 1);
     }
 
     // Reset device
@@ -106,20 +126,20 @@ int main(int argc, char **argv)
         goto out;
     }
 
-    // Send password plyload
-    libusb_bulk_transfer(devh, EP_DATA_IN,  payload_header, sizeof(payload_header), &transferred, 5000);
-    libusb_bulk_transfer(devh, EP_DATA_IN,  payload_passwd, sizeof(payload_passwd), &transferred, 5000);
-    libusb_bulk_transfer(devh, EP_DATA_OUT, payload_passwd, sizeof(payload_passwd), &transferred, 5000);
+    // Send unlock command
+    libusb_bulk_transfer(devh, EP_DATA_IN,  payload_unlock, sizeof(payload_unlock), &transferred, 3000);
+    libusb_bulk_transfer(devh, EP_DATA_IN,  payload_passwd, sizeof(payload_passwd), &transferred, 3000);
+    libusb_bulk_transfer(devh, EP_DATA_OUT, payload_passwd, sizeof(payload_passwd), &transferred, 3000);
 
     if (payload_passwd[9] != 0x00) {
-        fprintf(stderr, "Unlock failed\n");
+        printf("Unlock failed\n");
     } else {
-        fprintf(stderr, "Unlock successfuly\n");
+        printf("Unlock successfuly\n");
     }
 
     // Send relink command
-    libusb_bulk_transfer(devh, EP_DATA_IN,  payload_relink, sizeof(payload_relink), &transferred, 5000);
-    libusb_bulk_transfer(devh, EP_DATA_OUT, payload_passwd, sizeof(payload_passwd), &transferred, 5000);
+    libusb_bulk_transfer(devh, EP_DATA_IN,  payload_relink, sizeof(payload_relink), &transferred, 3000);
+    libusb_bulk_transfer(devh, EP_DATA_OUT, payload_passwd, sizeof(payload_passwd), &transferred, 3000);
 
     // Release interface
     libusb_release_interface(devh, 0);
