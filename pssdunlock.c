@@ -44,6 +44,7 @@ uint8_t payload_relink[31] = {
 };
 
 uint8_t payload_passwd[512] = {0};
+uint8_t payload_return[512] = {0};
 
 int main(int argc, char **argv)
 {
@@ -129,9 +130,9 @@ int main(int argc, char **argv)
     // Send unlock command
     libusb_bulk_transfer(devh, EP_DATA_IN,  payload_unlock, sizeof(payload_unlock), &transferred, 3000);
     libusb_bulk_transfer(devh, EP_DATA_IN,  payload_passwd, sizeof(payload_passwd), &transferred, 3000);
-    libusb_bulk_transfer(devh, EP_DATA_OUT, payload_passwd, sizeof(payload_passwd), &transferred, 3000);
+    libusb_bulk_transfer(devh, EP_DATA_OUT, payload_return, sizeof(payload_return), &transferred, 3000);
 
-    if (payload_passwd[9] != 0x00) {
+    if (payload_return[9] == 0x02) {
         printf("Unlock failed\n");
     } else {
         printf("Unlock successfuly\n");
@@ -139,7 +140,13 @@ int main(int argc, char **argv)
 
     // Send relink command
     libusb_bulk_transfer(devh, EP_DATA_IN,  payload_relink, sizeof(payload_relink), &transferred, 3000);
-    libusb_bulk_transfer(devh, EP_DATA_OUT, payload_passwd, sizeof(payload_passwd), &transferred, 3000);
+    libusb_bulk_transfer(devh, EP_DATA_OUT, payload_return, sizeof(payload_return), &transferred, 3000);
+
+    if (payload_return[9] == 0x02) {
+        printf("Relink failed\n");
+    } else {
+        printf("Relink successfuly\n");
+    }
 
     // Release interface
     libusb_release_interface(devh, 0);
